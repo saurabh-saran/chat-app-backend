@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Functionality Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .warning {
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin: 10px 0;
+        }
+
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .recording {
+            background: #dc3545;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔧 Chat Functionality Test Suite</h1>
+        <p>This tool helps you test and debug the voice and image functionality in your chat app.</p>
+
+        <div class="test-section">
+            <h3>1. 🚀 Server Connection Test</h3>
+            <button onclick="testServerConnection()">Test Server Connection</button>
+            <div id="serverStatus"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. 📤 Upload Endpoint Test</h3>
+            <button onclick="testUploadEndpoint()">Test Upload Endpoint</button>
+            <div id="uploadStatus"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. 🎤 Voice Recording Test</h3>
+            <button id="recordBtn" onclick="toggleRecording()">Start Recording</button>
+            <span id="recordingTime" style="margin-left: 10px;"></span>
+            <div id="recordingStatus"></div>
+            <audio id="audioPlayer" controls style="display: none; width: 100%; margin-top: 10px;"></audio>
+        </div>
+
+        <div class="test-section">
+            <h3>4. 🖼️ Image Upload Test</h3>
+            <input type="file" id="imageInput" accept="image/*" onchange="testImageUpload()">
+            <div id="imageStatus"></div>
+            <div id="imagePreview" style="margin-top: 10px;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>5. 🔌 Socket.IO Connection Test</h3>
+            <button onclick="testSocketConnection()">Test Socket Connection</button>
+            <div id="socketStatus"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>6. 📊 Complete Integration Test</h3>
+            <button onclick="runCompleteTest()">Run Complete Test</button>
+            <div id="integrationStatus"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Test Log</h3>
+            <div id="testLog" class="log"></div>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let recordingStartTime;
+        let recordingInterval;
+        const API_URL = 'http://localhost:8000';
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logEntry.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('testLog').innerHTML = '';
+        }
+
+        async function testServerConnection() {
+            const status = document.getElementById('serverStatus');
+            status.innerHTML = 'Testing...';
+            log('Testing server connection...');
+
+            try {
+                const response = await fetch(`${API_URL}/users`, {
+                    method: 'GET',
+                    timeout: 5000
+                });
+
+                if (response.ok) {
+                    status.innerHTML = '<span style="color: green;">✅ Server is running and accessible</span>';
+                    status.parentElement.className = 'test-section success';
+                    log('Server connection successful', 'success');
+                } else {
+                    status.innerHTML = '<span style="color: red;">❌ Server responded with error: ' + response.status + '</span>';
+                    status.parentElement.className = 'test-section error';
+                    log('Server responded with error: ' + response.status, 'error');
+                }
+            } catch (error) {
+                status.innerHTML = '<span style="color: red;">❌ Cannot connect to server: ' + error.message + '</span>';
+                status.parentElement.className = 'test-section error';
+                log('Server connection failed: ' + error.message, 'error');
+            }
+        }
+
+        async function testUploadEndpoint() {
+            const status = document.getElementById('uploadStatus');
+            status.innerHTML = 'Testing...';
+            log('Testing upload endpoint...');
+
+            try {
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST'
+                });
+
+                if (response.status === 400) {
+                    status.innerHTML = '<span style="color: green;">✅ Upload endpoint is working (expects file)</span>';
+                    status.parentElement.className = 'test-section success';
+                    log('Upload endpoint is accessible', 'success');
+                } else {
+                    status.innerHTML = '<span style="color: red;">❌ Upload endpoint error: ' + response.status + '</span>';
+                    status.parentElement.className = 'test-section error';
+                    log('Upload endpoint error: ' + response.status, 'error');
+                }
+            } catch (error) {
+                status.innerHTML = '<span style="color: red;">❌ Upload endpoint failed: ' + error.message + '</span>';
+                status.parentElement.className = 'test-section error';
+                log('Upload endpoint failed: ' + error.message, 'error');
+            }
+        }
+
+        function toggleRecording() {
+            const btn = document.getElementById('recordBtn');
+            const status = document.getElementById('recordingStatus');
+            const timeSpan = document.getElementById('recordingTime');
+
+            if (!isRecording) {
+                startRecording();
+                btn.textContent = 'Stop Recording';
+                btn.className = 'recording';
+                status.innerHTML = 'Recording...';
+                log('Starting voice recording...');
+            } else {
+                stopRecording();
+                btn.textContent = 'Start Recording';
+                btn.className = '';
+                status.innerHTML = 'Recording stopped';
+                timeSpan.textContent = '';
+                log('Stopping voice recording...');
+            }
+        }
+
+        async function startRecording() {
+            try {
+                log('Requesting microphone access...');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    }
+                });
+
+                log('Microphone access granted', 'success');
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                    log('Audio data chunk received');
+                };
+
+                mediaRecorder.onstop = () => {
+                    log('Recording stopped, processing audio...');
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audioPlayer = document.getElementById('audioPlayer');
+                    audioPlayer.src = audioUrl;
+                    audioPlayer.style.display = 'block';
+
+                    log('Audio blob created: ' + (audioBlob.size / 1024).toFixed(2) + ' KB', 'success');
+                    testVoiceUpload(audioBlob);
+
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start(1000);
+                isRecording = true;
+                recordingStartTime = Date.now();
+
+                // Update recording time
+                recordingInterval = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+                    document.getElementById('recordingTime').textContent = `Recording: ${elapsed}s`;
+                }, 1000);
+
+                log('Recording started successfully', 'success');
+            } catch (error) {
+                log('Microphone error: ' + error.message, 'error');
+                document.getElementById('recordingStatus').innerHTML = 'Error: ' + error.message;
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                isRecording = false;
+                if (recordingInterval) {
+                    clearInterval(recordingInterval);
+                }
+            }
+        }
+
+        async function testVoiceUpload(audioBlob) {
+            const status = document.getElementById('recordingStatus');
+            log('Testing voice upload...');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'test-voice.webm');
+
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    status.innerHTML += '<br><span style="color: green;">✅ Voice upload successful: ' + result.fileUrl + '</span>';
+                    log('Voice upload successful: ' + result.fileUrl, 'success');
+                } else {
+                    status.innerHTML += '<br><span style="color: red;">❌ Voice upload failed: ' + result.error + '</span>';
+                    log('Voice upload failed: ' + result.error, 'error');
+                }
+            } catch (error) {
+                status.innerHTML += '<br><span style="color: red;">❌ Upload error: ' + error.message + '</span>';
+                log('Voice upload error: ' + error.message, 'error');
+            }
+        }
+
+        async function testImageUpload() {
+            const file = document.getElementById('imageInput').files[0];
+            const status = document.getElementById('imageStatus');
+            const preview = document.getElementById('imagePreview');
+
+            if (!file) return;
+
+            log('Testing image upload: ' + file.name + ' (' + (file.size / 1024).toFixed(2) + ' KB)');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    status.innerHTML = '<span style="color: green;">✅ Image upload successful: ' + result.fileUrl + '</span>';
+                    status.parentElement.className = 'test-section success';
+                    preview.innerHTML = '<img src="' + result.fileUrl + '" style="max-width: 200px; max-height: 200px; border-radius: 5px;">';
+                    log('Image upload successful: ' + result.fileUrl, 'success');
+                } else {
+                    status.innerHTML = '<span style="color: red;">❌ Image upload failed: ' + result.error + '</span>';
+                    status.parentElement.className = 'test-section error';
+                    log('Image upload failed: ' + result.error, 'error');
+                }
+            } catch (error) {
+                status.innerHTML = '<span style="color: red;">❌ Upload error: ' + error.message + '</span>';
+                status.parentElement.className = 'test-section error';
+                log('Image upload error: ' + error.message, 'error');
+            }
+        }
+
+        function testSocketConnection() {
+            const status = document.getElementById('socketStatus');
+            status.innerHTML = 'Testing...';
+            log('Testing Socket.IO connection...');
+
+            try {
+                const socket = io(API_URL);
+
+                socket.on('connect', () => {
+                    status.innerHTML = '<span style="color: green;">✅ Socket connected successfully (ID: ' + socket.id + ')</span>';
+                    status.parentElement.className = 'test-section success';
+                    log('Socket connected successfully: ' + socket.id, 'success');
+                    socket.disconnect();
+                });
+
+                socket.on('connect_error', (error) => {
+                    status.innerHTML = '<span style="color: red;">❌ Socket connection failed: ' + error.message + '</span>';
+                    status.parentElement.className = 'test-section error';
+                    log('Socket connection failed: ' + error.message, 'error');
+                });
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    if (socket.connected === false) {
+                        status.innerHTML = '<span style="color: red;">❌ Socket connection timeout</span>';
+                        status.parentElement.className = 'test-section error';
+                        log('Socket connection timeout', 'error');
+                    }
+                }, 5000);
+            } catch (error) {
+                status.innerHTML = '<span style="color: red;">❌ Socket error: ' + error.message + '</span>';
+                status.parentElement.className = 'test-section error';
+                log('Socket error: ' + error.message, 'error');
+            }
+        }
+
+        async function runCompleteTest() {
+            const status = document.getElementById('integrationStatus');
+            status.innerHTML = 'Running complete test...';
+            log('Starting complete integration test...');
+
+            let testsPassed = 0;
+            let totalTests = 4;
+
+            // Test 1: Server connection
+            try {
+                const response = await fetch(`${API_URL}/users`);
+                if (response.ok) {
+                    testsPassed++;
+                    log('✅ Server connection test passed', 'success');
+                } else {
+                    log('❌ Server connection test failed', 'error');
+                }
+            } catch (error) {
+                log('❌ Server connection test failed: ' + error.message, 'error');
+            }
+
+            // Test 2: Upload endpoint
+            try {
+                const response = await fetch(`${API_URL}/upload`, { method: 'POST' });
+                if (response.status === 400) {
+                    testsPassed++;
+                    log('✅ Upload endpoint test passed', 'success');
+                } else {
+                    log('❌ Upload endpoint test failed', 'error');
+                }
+            } catch (error) {
+                log('❌ Upload endpoint test failed: ' + error.message, 'error');
+            }
+
+            // Test 3: Socket connection
+            try {
+                const socket = io(API_URL);
+                await new Promise((resolve, reject) => {
+                    socket.on('connect', () => {
+                        testsPassed++;
+                        log('✅ Socket connection test passed', 'success');
+                        socket.disconnect();
+                        resolve();
+                    });
+                    socket.on('connect_error', reject);
+                    setTimeout(() => reject(new Error('Timeout')), 3000);
+                });
+            } catch (error) {
+                log('❌ Socket connection test failed: ' + error.message, 'error');
+            }
+
+            // Test 4: Microphone access
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                testsPassed++;
+                log('✅ Microphone access test passed', 'success');
+                stream.getTracks().forEach(track => track.stop());
+            } catch (error) {
+                log('❌ Microphone access test failed: ' + error.message, 'error');
+            }
+
+            // Results
+            if (testsPassed === totalTests) {
+                status.innerHTML = '<span style="color: green;">✅ All tests passed! (' + testsPassed + '/' + totalTests + ')</span>';
+                status.parentElement.className = 'test-section success';
+                log('🎉 All integration tests passed!', 'success');
+            } else {
+                status.innerHTML = '<span style="color: orange;">⚠️ Some tests failed (' + testsPassed + '/' + totalTests + ')</span>';
+                status.parentElement.className = 'test-section warning';
+                log('⚠️ Some integration tests failed', 'error');
+            }
+        }
+
+        // Auto-run server connection test on page load
+        window.onload = function () {
+            log('Chat functionality test suite loaded');
+            testServerConnection();
+        };
+    </script>
+</body>
+
+</html>
