@@ -12,60 +12,51 @@ const fs = require("fs");
 const app = express();
 const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: { origin: "*" },
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('uploads'));
+app.use(express.static("uploads"));
 
-// Create uploads directory if it doesn't exist
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
-}
+if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 
-// Configure multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
+  destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(
+      null,
+      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
+    );
+  },
 });
-
 const upload = multer({
   storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // Allow images and audio files
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) {
+    if (
+      file.mimetype.startsWith("image/") ||
+      file.mimetype.startsWith("audio/")
+    )
       cb(null, true);
-    } else {
-      cb(new Error('Only image and audio files are allowed!'), false);
-    }
-  }
+    else cb(new Error("Only image and audio files are allowed!"), false);
+  },
 });
 
-// MongoDB Connection
 const MONGO_URI =
   "mongodb+srv://saurabhsaran474_db_user:kyWpgkxEHxdYoMcS@cluster0.qrnb4rf.mongodb.net/chatapp?retryWrites=true&w=majority&appName=Cluster0";
-
 mongoose.connect(MONGO_URI);
 mongoose.connection.on("connected", () => console.log("MongoDB connected"));
 mongoose.connection.on("error", (err) =>
   console.log("MongoDB connection error", err)
 );
 
-// Schemas
+// --- USER Schema changed ---
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true },
   password: String,
   online: Boolean,
+  lastChatTime: { type: Date, default: null }, // <-- Feature added
 });
 const User = mongoose.model("User", userSchema);
 
@@ -73,13 +64,16 @@ const messageSchema = new mongoose.Schema({
   from: String,
   to: String,
   message: String,
-  messageType: { type: String, enum: ['text', 'image', 'voice'], default: 'text' },
+  messageType: {
+    type: String,
+    enum: ["text", "image", "voice"],
+    default: "text",
+  },
   fileUrl: String,
   timestamp: { type: Date, default: Date.now },
 });
 const Message = mongoose.model("Message", messageSchema);
 
-// Secret Key
 const SECRET_KEY = "your_secret_key";
 
 // Signup route
@@ -106,20 +100,18 @@ app.post("/login", async (req, res) => {
 
   user.online = true;
   await user.save();
-
-  // JWT token generate (optional)
   const token = jwt.sign({ username: user.username }, SECRET_KEY);
-
   res.json({ token, username: user.username });
 });
 
-// Get all users for UserList
+// --- RECENT USERS ---
 app.get("/users", async (req, res) => {
-  const users = await User.find({}, "username online -_id");
+  const users = await User.find({}, "username online lastChatTime -_id").sort({
+    lastChatTime: -1,
+  });
   res.json(users);
 });
 
-// Get chat history between two users
 app.get("/messages", async (req, res) => {
   const { from, to } = req.query;
   const messages = await Message.find({
@@ -131,50 +123,38 @@ app.get("/messages", async (req, res) => {
   res.json(messages);
 });
 
-// File upload endpoint
-app.post("/upload", upload.single('file'), (req, res) => {
-  console.log('Upload request received:', req.file);
-
-  if (!req.file) {
-    console.log('No file uploaded');
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-
+app.post("/upload", upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   try {
-    const fileUrl = `${req.protocol}://${req.get('host')}/${req.file.filename}`;
-    console.log('File uploaded successfully:', fileUrl);
-
+    const fileUrl = `${req.protocol}://${req.get("host")}/${req.file.filename}`;
     res.json({
       success: true,
-      fileUrl: fileUrl,
+      fileUrl,
       filename: req.file.filename,
       originalName: req.file.originalname,
       mimetype: req.file.mimetype,
-      size: req.file.size
+      size: req.file.size,
     });
   } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'Upload failed' });
+    res.status(500).json({ error: "Upload failed" });
   }
 });
 
-// Error handling for multer
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' });
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res
+        .status(400)
+        .json({ error: "File too large. Maximum size is 10MB." });
     }
   }
-  console.error('Upload middleware error:', error);
-  res.status(500).json({ error: 'Upload failed' });
+  res.status(500).json({ error: "Upload failed" });
 });
 
-// Socket.IO for realtime chat
+// --- SOCKET.IO with recent logic ---
 let onlineUsers = new Map();
 
 io.on("connection", (socket) => {
-  console.log("New user connected with id:", socket.id);
-
   socket.on("userOnline", async (username) => {
     onlineUsers.set(username, socket.id);
     await User.updateOne({ username }, { online: true });
@@ -182,28 +162,26 @@ io.on("connection", (socket) => {
   });
 
   socket.on("sendMessage", async (data) => {
-    console.log('Received message:', data);
-    const { from, to, message, messageType = 'text', fileUrl } = data;
-
+    const { from, to, message, messageType = "text", fileUrl } = data;
     try {
       const newMsg = new Message({ from, to, message, messageType, fileUrl });
       await newMsg.save();
-      console.log('Message saved to database');
 
-      const messageData = { ...data, messageType, fileUrl, timestamp: newMsg.timestamp };
+      // --- Update recent chat timestamp for both users ---
+      const now = new Date();
+      await User.updateOne({ username: from }, { $set: { lastChatTime: now } });
+      await User.updateOne({ username: to }, { $set: { lastChatTime: now } });
 
+      const messageData = {
+        ...data,
+        messageType,
+        fileUrl,
+        timestamp: newMsg.timestamp,
+      };
       const toSocketId = onlineUsers.get(to);
-      if (toSocketId) {
-        console.log('Sending message to recipient:', to);
-        io.to(toSocketId).emit("receiveMessage", messageData);
-      } else {
-        console.log('Recipient not online:', to);
-      }
-
-      // Send confirmation back to sender
+      if (toSocketId) io.to(toSocketId).emit("receiveMessage", messageData);
       socket.emit("receiveMessage", messageData);
     } catch (error) {
-      console.error('Error saving message:', error);
       socket.emit("error", { message: "Failed to send message" });
     }
   });
@@ -217,12 +195,10 @@ io.on("connection", (socket) => {
         break;
       }
     }
-    console.log("User disconnected:", socket.id);
   });
 });
 
 const PORT = process.env.PORT || 8000;
-
 server.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
