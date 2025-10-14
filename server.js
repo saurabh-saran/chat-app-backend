@@ -12,6 +12,8 @@ const fs = require("fs");
 const app = express();
 const server = http.createServer(app);
 
+if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(cors());
@@ -34,12 +36,22 @@ const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
+    // if (
+    //   file.mimetype.startsWith("image/") ||
+    //   file.mimetype.startsWith("audio/")
+    // )
     if (
       file.mimetype.startsWith("image/") ||
-      file.mimetype.startsWith("audio/")
+      file.mimetype.startsWith("audio/") ||
+      file.mimetype === "application/pdf" || // <-- ADD THIS LINE
+      file.mimetype.startsWith("video/") // (agar video bhi allow karna hai)
     )
       cb(null, true);
-    else cb(new Error("Only image and audio files are allowed!"), false);
+    else
+      cb(
+        new Error("Only image, audio, video, and PDF files are allowed!"),
+        false
+      );
   },
 });
 
@@ -66,7 +78,7 @@ const messageSchema = new mongoose.Schema({
   message: String,
   messageType: {
     type: String,
-    enum: ["text", "image", "voice"],
+    enum: ["text", "image", "voice", "doc", "video"],
     default: "text",
   },
   fileUrl: String,
@@ -138,6 +150,8 @@ app.post("/upload", upload.single("file"), (req, res) => {
   } catch (error) {
     res.status(500).json({ error: "Upload failed" });
   }
+  console.log("File body:", req.body);
+  console.log("File info:", req.file);
 });
 
 app.use((error, req, res, next) => {
